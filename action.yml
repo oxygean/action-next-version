@@ -1,0 +1,86 @@
+name: 'Version Bump'
+description: 'Automatically bump version in package.json after successful deployment'
+author: 'OXygean'
+
+inputs:
+  environment:
+    description: 'Environment (staging/release)'
+    required: true
+  version_type:
+    description: 'Version type (major/minor/patch)'
+    required: true
+  github_pat:
+    description: 'GitHub Personal Access Token for committing'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Configure Git
+      shell: bash
+      run: |
+        git config user.name "oxygean-bot"
+        git config user.email "github@oxygean.com"
+
+    - name: Bump Version
+      shell: bash
+      run: |
+        # Determine version suffix based on environment
+        if [ "${{ inputs.environment }}" = "staging" ]; then
+          VERSION_SUFFIX="-b"
+        else
+          VERSION_SUFFIX=""
+        fi
+        
+        # Get current version
+        CURRENT_VERSION=$(node -p "require('./package.json').version")
+        echo "Current version: $CURRENT_VERSION"
+        
+        # Bump version based on type
+        if [ "${{ inputs.version_type }}" = "major" ]; then
+          npm version major --no-git-tag-version
+        elif [ "${{ inputs.version_type }}" = "minor" ]; then
+          npm version minor --no-git-tag-version
+        else
+          npm version patch --no-git-tag-version
+        fi
+        
+        # Get new version
+        NEW_VERSION=$(node -p "require('./package.json').version")
+        
+        # Add suffix for staging
+        if [ "${{ inputs.environment }}" = "staging" ]; then
+          # Increment beta number or start at 1
+          if [[ "$CURRENT_VERSION" == *"-b."* ]]; then
+            BETA_NUM=$(echo "$CURRENT_VERSION" | grep -oP '\-b\.\K\d+')
+            NEXT_BETA=$((BETA_NUM + 1))
+            FINAL_VERSION="${NEW_VERSION}-b.${NEXT_BETA}"
+          else
+            FINAL_VERSION="${NEW_VERSION}-b.1"
+          fi
+          npm version "$FINAL_VERSION" --no-git-tag-version --allow-same-version
+        else
+          FINAL_VERSION="$NEW_VERSION"
+        fi
+        
+        echo "New version: $FINAL_VERSION"
+        echo "version=$FINAL_VERSION" >> $GITHUB_OUTPUT
+
+    - name: Commit and Push
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_pat }}
+      run: |
+        VERSION=$(node -p "require('./package.json').version")
+        
+        git add package.json
+        git commit -m "[BOT] Version bump to v${VERSION}"
+        
+        # Push using PAT
+        git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+        git push origin HEAD
