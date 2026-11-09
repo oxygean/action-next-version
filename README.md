@@ -6,7 +6,7 @@ Automatically bump version in `package.json` after successful deployment.
 
 ```yaml
 - name: Version Bump
-  uses: oxygean-hub/action-next-version@v0.0.4
+  uses: oxygean/action-next-version@v0.0.4
   with:
     environment: staging  # or release
     version_type: patch   # or major, minor
